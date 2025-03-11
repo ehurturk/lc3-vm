@@ -17,6 +17,8 @@
 #define I32 int32_t
 #define I64 int64_t
 
+#define DEBUG_REGISTERS
+
 /*
  * LC-3 architecture has 65536 memory locations
  * Which is 2^16, each storing 16-bit value.
@@ -24,7 +26,7 @@
 #define MEMORY_MAX (1 << 16)
 U16 memory[MEMORY_MAX];
 
-enum {
+enum REG {
     // general purpose registers
     R_R0 = 0,
     R_R1,
@@ -44,7 +46,7 @@ enum {
 U16 reg[R_COUNT];
 
 /* Every instruction is 16-bit */
-enum {
+enum INSTR {
     OP_BR = 0, /* branch */
     OP_ADD,    /* add */
     OP_LD,     /* load (memory) */
@@ -63,13 +65,13 @@ enum {
     OP_TRAP    /* execute trap */
 };
 
-enum {
+enum C_FLAG {
     FL_POS = 1 << 0, /* positive */
     FL_ZRO = 1 << 1, /* zero */
     FL_NEG = 1 << 2, /* negative */
 };
 
-enum {
+enum TRAP_VECT {
     TRAP_GETC = 0x20,  /* get character from keyboard, not echoed onto the terminal */
     TRAP_OUT = 0x21,   /* output a character */
     TRAP_PUTS = 0x22,  /* output a word string */
@@ -79,7 +81,7 @@ enum {
 };
 
 /* memory mapped registers */
-enum {
+enum MMR {
     MR_KBSR = 0xfe00, /* keyboard status register address */
     MR_KBDR = 0xfe02, /* keyboard data register address */
     MR_DSR = 0xfe04,  /* display status register addrress */
@@ -210,6 +212,26 @@ void update_cflags(U16 r) {
     }
 }
 
+void print_registers() {
+#define GET_REG_NAME(reg)           \
+    ((reg) == R_R0      ? "R_R0"    \
+     : (reg) == R_R1    ? "R_R1"    \
+     : (reg) == R_R2    ? "R_R2"    \
+     : (reg) == R_R3    ? "R_R3"    \
+     : (reg) == R_R4    ? "R_R4"    \
+     : (reg) == R_R5    ? "R_R5"    \
+     : (reg) == R_R6    ? "R_R6"    \
+     : (reg) == R_R7    ? "R_R7"    \
+     : (reg) == R_PC    ? "R_PC"    \
+     : (reg) == R_COND  ? "R_COND"  \
+     : (reg) == R_COUNT ? "R_COUNT" \
+                        : "UNKNOWN_REG")
+    for (int i = 0; i < R_COUNT; i++) {
+        const char* reg_name;
+        printf("Register: %s, Value: %d\n", GET_REG_NAME((enum REG)i), reg[i]);
+    }
+}
+
 int main(int argc, const char** argv) {
     /* Load arguments */
     handle_args(argc, argv);
@@ -240,7 +262,7 @@ int main(int argc, const char** argv) {
                 if (imm_mode) {
                     s2 = sign_extend((0x1f & instr), 5);
                 } else {
-                    s2 = instr & 0x7;
+                    s2 = reg[instr & 0x7];
                 }
                 reg[dest_reg] = reg[s1_reg] + s2;
                 update_cflags(dest_reg);
@@ -255,7 +277,7 @@ int main(int argc, const char** argv) {
                 if (imm_mode) {
                     s2 = sign_extend((0x1f & instr), 5);
                 } else {
-                    s2 = instr & 0x7;
+                    s2 = reg[instr & 0x7];
                 }
                 reg[dest_reg] = reg[s1_reg] & s2;
                 update_cflags(dest_reg);
@@ -268,7 +290,7 @@ int main(int argc, const char** argv) {
                 }
                 break;
             }
-            t case OP_JMP: {
+            case OP_JMP: {
                 U16 breg = (instr >> 6) & 0x7;
                 reg[R_PC] = reg[breg];
                 break;
@@ -408,4 +430,8 @@ int main(int argc, const char** argv) {
 
     /* shutdown */
     restore_input_buffering();
+
+#ifdef DEBUG_REGISTERS
+    print_registers();
+#endif
 }
