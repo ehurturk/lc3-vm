@@ -81,21 +81,23 @@ enum {
 /* memory mapped registers */
 enum {
     MR_KBSR = 0xfe00, /* keyboard status register address */
-    MR_KBDR = 0xfe02  /* keyboard data register address */
+    MR_KBDR = 0xfe02, /* keyboard data register address */
+    MR_DSR = 0xfe04,  /* display status register addrress */
+    MR_DDR = 0xfe06   /* display data register address */
 };
 
-struct termios orig_t;
+struct termios original_tio;
 
 void disable_input_buffering() {
-    tcgetattr(STDIN_FILENO, &orig_t);
-    struct termios new_t = orig_t;
-    new_t.c_lflag &= ~ICANON & ~ECHO;
-    tcsetattr(STDIN_FILENO, TCSANOW, &new_t);
+    tcgetattr(STDIN_FILENO, &original_tio);
+    struct termios new_tio = original_tio;
+    new_tio.c_lflag &= ~ICANON & ~ECHO;
+    tcsetattr(STDIN_FILENO, TCSANOW, &new_tio);
 }
 
-void restore_input_buffering() { tcsetattr(STDIN_FILENO, TCSANOW, &orig_t); }
+void restore_input_buffering() { tcsetattr(STDIN_FILENO, TCSANOW, &original_tio); }
 
-U16 check_key() {
+uint16_t check_key() {
     fd_set readfds;
     FD_ZERO(&readfds);
     FD_SET(STDIN_FILENO, &readfds);
@@ -166,8 +168,8 @@ int read_image(const char* path) {
 U16 mem_read(U16 addr) {
     if (addr == MR_KBSR) {
         if (check_key()) {
-            memory[MR_KBSR] = (1 << 15); /* set status to 2^15 */
-            memory[MR_KBDR] = getchar(); /* set keyboard data to char input */
+            memory[MR_KBSR] = (1 << 15); /* the ready bit KBSR[15] is set to one */
+            memory[MR_KBDR] = getchar(); /* set keyboard data to bits [7:0] */
         } else {
             memory[MR_KBSR] = 0;
         }
@@ -226,9 +228,9 @@ int main(int argc, const char** argv) {
     while (running) {
         /* fetch the instruction */
         U16 instr = mem_read(reg[R_PC]++);
+        // printf("%d\n", instr);
         U16 op = instr >> 12; /* get the first 4 bytes of the instruction (opcode) */
 
-        // FIXME: Opcode ordering!
         switch (op) {
             case OP_ADD: {
                 U16 imm_mode = (0x1 & (instr >> 5));
@@ -266,7 +268,7 @@ int main(int argc, const char** argv) {
                 }
                 break;
             }
-            case OP_JMP: {
+            t case OP_JMP: {
                 U16 breg = (instr >> 6) & 0x7;
                 reg[R_PC] = reg[breg];
                 break;
@@ -339,10 +341,12 @@ int main(int argc, const char** argv) {
                 uint16_t r1 = (instr >> 6) & 0x7;
                 uint16_t offset = sign_extend(instr & 0x3F, 6);
                 mem_write(reg[r1] + offset, reg[r0]);
+
                 break;
             }
 
             case OP_TRAP: {
+                /* save the pc in r7 as a return address */
                 reg[R_R7] = reg[R_PC];
 
                 switch (instr & 0xFF) {
