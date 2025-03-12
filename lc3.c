@@ -137,20 +137,30 @@ void handle_interrupt(int signal) {
  *  5. Go back to step1
  */
 
+/* byte swap - swap the byte order of U16 integer */
 U16 swap16(U16 x) { return (x << 8) | (x >> 8); }
 
 /* read LC-3 program file */
 void read_image_file(FILE* file) {
     U16 origin;
+
+    /* get the .ORIG address of a LC3 program - read the first 2 bytes (U16 integer) */
     fread(&origin, sizeof(origin), 1, file);
+
+    /* convert to little endian */
     origin = swap16(origin);
 
+    /* the space that is allocated for user program is max_memory - origin (typically origin is at
+     * 0x3000) */
     U16 max_read = MEMORY_MAX - origin;
+
+    /* program start pointer */
     U16* p = memory + origin;
 
+    /* load up the whole obj file into the program pointer */
     size_t read = fread(p, sizeof(U16), max_read, file);
 
-    /* swap to little endian - move lower bits to lower addresses */
+    /* swap to little endian (lc3 uses big endian) */
     while (read-- > 0) {
         *p = swap16(*p);
         ++p;
